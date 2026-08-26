@@ -5,7 +5,11 @@ var emojiPicker = null;
 
 class CustomTextbox extends fabric.Textbox {
   constructor(text, options) {
-    super(text, options);
+    super(text, {
+      paintFirst: 'stroke',
+      strokeLineJoin: 'round',
+      ...options
+    });
     this.on('editing:entered', function () {
       console.log('Entered edit mode');
       setMode(Mode.EDIT_TEXT);
@@ -45,6 +49,8 @@ async function loadEmojiPopup() {
       fill: '#FF007F',  // Pink color
       stroke: '#ffffff', // White border
       strokeWidth: 2,
+      strokeLineJoin: 'round',
+      paintFirst: 'stroke',
       shadow: 'rgba(0,0,0,0.3) 2px 2px 2px',  // Black shadow
       fontWeight: '900',
     });
@@ -264,11 +270,17 @@ function handleDrop(e) {
   handleFiles(files);
 }
 
+var currentFileName = 'canvas_image.png';
+
 function handleFiles(files) {
   ([...files]).forEach(previewFile);
 }
 
 function previewFile(file) {
+  if (file && file.name) {
+    const baseName = file.name.replace(/\.[^/.]+$/, '');
+    currentFileName = `${baseName || 'canvas_image'}.png`;
+  }
   let reader = new FileReader();
   reader.readAsDataURL(file);
   reader.onloadend = function () {
@@ -390,7 +402,7 @@ async function downloadCroppedWithWatermark() {
 
   var link = document.createElement('a');
   link.href = dataURL;
-  link.download = 'canvas_image.png';
+  link.download = currentFileName || 'canvas_image.png';
   link.click();
   $.toast("Downloaded")
 }
@@ -478,8 +490,8 @@ document.addEventListener('keydown', function (e) {
         if (item.types.includes('image/png' || 'image/jpeg')) {
           item.getType('image/png').then(blob => {
             const reader = new FileReader();
-            reader.onload = function(event) {
-              fabric.Image.fromURL(event.target.result, function(oImg) {
+            reader.onload = function (event) {
+              fabric.Image.fromURL(event.target.result, function (oImg) {
                 // Calculate the max width (90% of canvas width)
                 const maxWidth = canvas.width * 0.9;
 
@@ -594,6 +606,8 @@ canvas.on('mouse:down', function (options) {
       fill: '#FF007F',  // Pink color
       stroke: '#ffffff', // White border
       strokeWidth: 2,
+      strokeLineJoin: 'round',
+      paintFirst: 'stroke',
       shadow: 'rgba(0,0,0,0.3) 2px 2px 2px',  // Black shadow
       fontWeight: '900',
       fixedWidth: 250,
