@@ -224,7 +224,107 @@ function syncTextControlsFromSelection() {
   }
 }
 
+function updateZoomUI(zoom) {
+  const select = $('#zoom-select');
+  const pct = Math.round(zoom * 100);
+  let matched = false;
+  select.find('option').each(function () {
+    const val = $(this).val();
+    if (val !== 'fit' && Math.round(parseFloat(val) * 100) === pct) {
+      select.val(val);
+      matched = true;
+    }
+  });
+  if (!matched) {
+    let customOpt = select.find('option[data-custom="true"]');
+    if (customOpt.length === 0) {
+      customOpt = $('<option data-custom="true"></option>').appendTo(select);
+    }
+    customOpt.val(zoom).text(`${pct}%`).prop('selected', true);
+  }
+}
+
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 10;
+
+function zoomToPoint(point, newZoom) {
+  if (newZoom < MIN_ZOOM) newZoom = MIN_ZOOM;
+  if (newZoom > MAX_ZOOM) newZoom = MAX_ZOOM;
+  canvas.zoomToPoint(point, newZoom);
+  updateZoomUI(newZoom);
+  canvas.requestRenderAll();
+}
+
+function zoomIn() {
+  const center = new fabric.Point(canvas.getWidth() / 2, canvas.getHeight() / 2);
+  const currentZoom = canvas.getZoom();
+  zoomToPoint(center, currentZoom * 1.25);
+}
+
+function zoomOut() {
+  const center = new fabric.Point(canvas.getWidth() / 2, canvas.getHeight() / 2);
+  const currentZoom = canvas.getZoom();
+  zoomToPoint(center, currentZoom / 1.25);
+}
+
+function resetZoom() {
+  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  updateZoomUI(1);
+  canvas.requestRenderAll();
+}
+
+function setZoomCenter(newZoom) {
+  const center = new fabric.Point(canvas.getWidth() / 2, canvas.getHeight() / 2);
+  zoomToPoint(center, newZoom);
+}
+
+function zoomFit() {
+  const objects = canvas.getObjects();
+  if (objects.length === 0) {
+    resetZoom();
+    return;
+  }
+
+  // Calculate bounding box in untransformed scene coordinates
+  const currentVpt = canvas.viewportTransform.slice();
+  canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
+  const tempGroup = new fabric.Group(objects);
+  const boundingRect = tempGroup.getBoundingRect();
+  tempGroup.destroy();
+  canvas.viewportTransform = currentVpt;
+
+  const canvasWidth = canvas.getWidth();
+  const canvasHeight = canvas.getHeight();
+  const scaleX = (canvasWidth * 0.9) / (boundingRect.width || 1);
+  const scaleY = (canvasHeight * 0.9) / (boundingRect.height || 1);
+  let zoom = Math.min(scaleX, scaleY, 1.0);
+  if (zoom < MIN_ZOOM) zoom = MIN_ZOOM;
+
+  const panX = (canvasWidth - boundingRect.width * zoom) / 2 - boundingRect.left * zoom;
+  const panY = (canvasHeight - boundingRect.height * zoom) / 2 - boundingRect.top * zoom;
+
+  canvas.setViewportTransform([zoom, 0, 0, zoom, panX, panY]);
+  $('#zoom-select').val('fit');
+  canvas.requestRenderAll();
+}
+
 $(document).ready(function () {
+  $('#zoom-in-btn').click(() => zoomIn());
+  $('#zoom-out-btn').click(() => zoomOut());
+  $('#zoom-reset-btn').click(() => resetZoom());
+
+  $('#zoom-select').change(function () {
+    const val = $(this).val();
+    if (val === 'fit') {
+      zoomFit();
+    } else {
+      const z = parseFloat(val);
+      if (!isNaN(z)) {
+        setZoomCenter(z);
+      }
+    }
+  });
+
   $('#emoji-button').click(() => {
     openEmojiPicker()
   })
@@ -244,6 +344,13 @@ $(document).ready(function () {
   $('#copy-image-to-clipboard-button').click(() => {
     copyImageToClipboard()
   })
+
+  // Prevent browser autoscroll on middle click over drop_area / canvas
+  $('#drop_area').on('mousedown auxclick', function (e) {
+    if (e.button === 1 || e.which === 2) {
+      e.preventDefault();
+    }
+  });
 
   // Handle file-upload-button click
   $('#file-upload-button').on('click', function (e) {
@@ -366,6 +473,9 @@ let canvas = new fabric.Canvas('canvas', {
   uniformScaling: false,
   interactive: true,
   preserveObjectStacking: true,
+  fireMiddleClick: true,
+  fireRightClick: true,
+  stopContextMenu: true,
 });
 
 fabric.Rect.prototype._controlsVisibility = {
@@ -565,6 +675,10 @@ async function getImageWithWatermark() {
     return null;
   }
 
+  // Preserve current zoom & pan
+  const currentVpt = canvas.viewportTransform.slice();
+  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+
   // Group all objects temporarily to get bounding box
   var tempGroup = new fabric.Group(objects);
   var boundingBox = tempGroup.getBoundingRect();
@@ -572,8 +686,9 @@ async function getImageWithWatermark() {
 
   const watermarkEnabled = localStorage.getItem('watermark') === 'true';
 
+  let dataURL = null;
   if (watermarkEnabled) {
-    return new Promise((resolve) => {
+    dataURL = await new Promise((resolve) => {
       fabric.Image.fromURL('assets/watermark.png', function (watermarkImg) {
         var scaleFactor = 0.1;
         watermarkImg.scale(scaleFactor);
@@ -587,7 +702,7 @@ async function getImageWithWatermark() {
         canvas.add(watermarkImg);
         canvas.renderAll();
 
-        const dataURL = canvas.toDataURL({
+        const url = canvas.toDataURL({
           format: 'png',
           quality: 1.0,
           left: boundingBox.left,
@@ -598,13 +713,11 @@ async function getImageWithWatermark() {
         });
 
         canvas.remove(watermarkImg);
-        canvas.renderAll();
-
-        resolve(dataURL);
+        resolve(url);
       });
     });
   } else {
-    const dataURL = canvas.toDataURL({
+    dataURL = canvas.toDataURL({
       format: 'png',
       quality: 1.0,
       left: boundingBox.left,
@@ -613,8 +726,13 @@ async function getImageWithWatermark() {
       height: boundingBox.height,
       enableRetinaScaling: true
     });
-    return dataURL;
   }
+
+  // Restore zoom & pan
+  canvas.setViewportTransform(currentVpt);
+  canvas.renderAll();
+
+  return dataURL;
 }
 
 async function downloadCroppedWithWatermark() {
@@ -652,9 +770,33 @@ async function copyImageToClipboard() {
     });
 }
 
-// Keyboard event to toggle text mode
-// Keyboard event to toggle modes
+let isPanning = false;
+let isSpacePressed = false;
+let isAltPressed = false;
+let lastPosX = 0;
+let lastPosY = 0;
+
 document.addEventListener('keydown', function (e) {
+  // Alt key for panning
+  if ((e.key === 'Alt' || e.code === 'AltLeft' || e.code === 'AltRight') && !$(e.target).is('input, textarea, select')) {
+    if (!isAltPressed) {
+      isAltPressed = true;
+      canvas.defaultCursor = 'grab';
+      canvas.setCursor('grab');
+    }
+  }
+
+  // Space key for panning
+  if (e.code === 'Space' && mode !== Mode.EDIT_TEXT && !$(e.target).is('input, textarea, select')) {
+    if (!isSpacePressed) {
+      isSpacePressed = true;
+      canvas.defaultCursor = 'grab';
+      canvas.setCursor('grab');
+    }
+    e.preventDefault();
+    return;
+  }
+
   // cmd + enter should exit edit mode
   if ((e.ctrlKey || e.metaKey) && e.which === 13) {
     if (mode == Mode.EDIT_TEXT) {
@@ -669,6 +811,25 @@ document.addEventListener('keydown', function (e) {
     }
     setMode(Mode.NONE);
     return;
+  }
+
+  // Zoom Shortcuts: Ctrl+0, Ctrl+1, Ctrl+=, Ctrl+-
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === '0' || e.key === '1') {
+      e.preventDefault();
+      resetZoom();
+      return;
+    }
+    if (e.key === '=' || e.key === '+') {
+      e.preventDefault();
+      zoomIn();
+      return;
+    }
+    if (e.key === '-' || e.key === '_') {
+      e.preventDefault();
+      zoomOut();
+      return;
+    }
   }
 
   if (mode == Mode.EDIT_TEXT) {
@@ -727,7 +888,7 @@ document.addEventListener('keydown', function (e) {
                 }
 
                 oImg.set({
-                  left: (canvas.width - oImg.getScaledWidth()) / 2,
+                  left: (canvas.width - oImg.getScaledWidth()) / 2,  // Center horizontally
                   top: canvas.height * .1,
                   angle: 0
                 }).setCoords();
@@ -783,6 +944,50 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+document.addEventListener('keyup', function (e) {
+  if (e.key === 'Alt' || e.code === 'AltLeft' || e.code === 'AltRight') {
+    isAltPressed = false;
+    if (!isSpacePressed && !isPanning) {
+      canvas.defaultCursor = 'default';
+      canvas.setCursor('default');
+      if (mode === Mode.NONE) canvas.selection = true;
+    }
+  }
+  if (e.code === 'Space') {
+    isSpacePressed = false;
+    if (!isAltPressed && !isPanning) {
+      canvas.defaultCursor = 'default';
+      canvas.setCursor('default');
+      if (mode === Mode.NONE) canvas.selection = true;
+    }
+  }
+});
+
+canvas.on('mouse:wheel', function (opt) {
+  let delta = opt.e.deltaY;
+
+  // Shift + Wheel -> Horizontal pan
+  if (opt.e.shiftKey && !opt.e.ctrlKey && !opt.e.metaKey) {
+    canvas.relativePan(new fabric.Point(-delta, 0));
+    opt.e.preventDefault();
+    opt.e.stopPropagation();
+    return;
+  }
+
+  let zoom = canvas.getZoom();
+  if (opt.e.ctrlKey || opt.e.metaKey) {
+    // Smooth pinch / Ctrl+Wheel zoom
+    zoom *= 0.993 ** delta;
+  } else {
+    // Standard mouse wheel zoom
+    zoom *= delta > 0 ? 0.88 : 1.14;
+  }
+
+  zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
+  opt.e.preventDefault();
+  opt.e.stopPropagation();
+});
+
 function copy() {
   var activeObject = canvas.getActiveObject();
 
@@ -815,6 +1020,23 @@ function paste() {
 
 
 canvas.on('mouse:down', function (options) {
+  const e = options.e;
+  // Middle click (button 1 or which 2 or buttons 4), Alt+Drag, or Space+Drag
+  const isMiddleClick = (e.button === 1 || e.which === 2 || (e.buttons && (e.buttons & 4)));
+  const isAltDrag = (e.altKey || isAltPressed);
+  const isSpaceDrag = isSpacePressed;
+
+  if (isMiddleClick || isAltDrag || isSpaceDrag) {
+    isPanning = true;
+    canvas.selection = false;
+    lastPosX = e.clientX;
+    lastPosY = e.clientY;
+    canvas.setCursor('grabbing');
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
   isDown = true;
   let pointer = canvas.getPointer(options.e);
   origX = pointer.x;
@@ -913,6 +1135,17 @@ function getBoundsForPointer(pointer) {
 }
 
 canvas.on('mouse:move', function (o) {
+  if (isPanning) {
+    const e = o.e;
+    const deltaX = e.clientX - lastPosX;
+    const deltaY = e.clientY - lastPosY;
+    canvas.relativePan(new fabric.Point(deltaX, deltaY));
+    lastPosX = e.clientX;
+    lastPosY = e.clientY;
+    canvas.setCursor('grabbing');
+    return;
+  }
+
   if (!isDown) return;
   let pointer = canvas.getPointer(o.e);
   if (mode == Mode.RECT) {
@@ -937,6 +1170,19 @@ canvas.on('mouse:move', function (o) {
 });
 
 canvas.on('mouse:up', function (o) {
+  if (isPanning) {
+    isPanning = false;
+    if (isSpacePressed || isAltPressed) {
+      canvas.setCursor('grab');
+    } else {
+      canvas.setCursor('default');
+      if (mode === Mode.NONE) {
+        canvas.selection = true;
+      }
+    }
+    return;
+  }
+
   isDown = false;
   if (mode == Mode.RECT) {
     canvas.setActiveObject(canvas.item(canvas.getObjects().length - 1));
