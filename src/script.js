@@ -59,6 +59,171 @@ async function loadEmojiPopup() {
   });
 }
 
+const DEFAULT_FONTS = [
+  { name: 'Noto Sans JP', value: "'Noto Sans JP', sans-serif" },
+  { name: 'Default Sans', value: 'sans-serif' },
+  { name: 'Segoe UI', value: "'Segoe UI', sans-serif" },
+  { name: 'Meiryo', value: "'Meiryo', sans-serif" },
+  { name: 'Yu Gothic', value: "'Yu Gothic', sans-serif" },
+  { name: 'MS PGothic', value: "'MS PGothic', sans-serif" },
+  { name: 'Arial', value: "'Arial', sans-serif" },
+  { name: 'Helvetica', value: "'Helvetica', sans-serif" },
+  { name: 'Impact', value: "'Impact', sans-serif" },
+  { name: 'Times New Roman', value: "'Times New Roman', serif" },
+  { name: 'Courier New', value: "'Courier New', monospace" }
+];
+
+let localFontsLoaded = false;
+
+async function initFontList() {
+  const fontSelect = $('#font-family-select');
+  const storedFont = localStorage.getItem('pinkarrows_font_family') || "'Noto Sans JP', sans-serif";
+
+  let fontOptionsMap = new Map();
+  DEFAULT_FONTS.forEach(f => fontOptionsMap.set(f.name, f.value));
+
+  if ('queryLocalFonts' in window) {
+    try {
+      const localFonts = await window.queryLocalFonts();
+      if (localFonts && localFonts.length > 0) {
+        localFontsLoaded = true;
+        const localFamilies = new Set();
+        for (const font of localFonts) {
+          if (font.family && !font.family.startsWith('.')) {
+            localFamilies.add(font.family);
+          }
+        }
+        const sortedLocal = Array.from(localFamilies).sort((a, b) => a.localeCompare(b));
+        sortedLocal.forEach(family => {
+          if (!fontOptionsMap.has(family)) {
+            fontOptionsMap.set(family, `"${family}", sans-serif`);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Could not query local fonts initially:', e);
+    }
+  }
+
+  fontSelect.empty();
+  for (const [name, val] of fontOptionsMap.entries()) {
+    fontSelect.append($('<option>', {
+      value: val,
+      text: name
+    }));
+  }
+
+  // Restore stored value if exists, or select default
+  let found = false;
+  for (const val of fontOptionsMap.values()) {
+    if (val === storedFont) {
+      found = true;
+      break;
+    }
+  }
+  if (found) {
+    fontSelect.val(storedFont);
+  } else {
+    fontSelect.val("'Noto Sans JP', sans-serif");
+  }
+}
+
+async function loadSystemFontsIfNeeded() {
+  if (localFontsLoaded) return;
+  if ('queryLocalFonts' in window) {
+    try {
+      const localFonts = await window.queryLocalFonts();
+      if (localFonts && localFonts.length > 0) {
+        localFontsLoaded = true;
+        const fontSelect = $('#font-family-select');
+        const currentVal = fontSelect.val();
+
+        let fontOptionsMap = new Map();
+        DEFAULT_FONTS.forEach(f => fontOptionsMap.set(f.name, f.value));
+
+        const localFamilies = new Set();
+        for (const font of localFonts) {
+          if (font.family && !font.family.startsWith('.')) {
+            localFamilies.add(font.family);
+          }
+        }
+        const sortedLocal = Array.from(localFamilies).sort((a, b) => a.localeCompare(b));
+        sortedLocal.forEach(family => {
+          if (!fontOptionsMap.has(family)) {
+            fontOptionsMap.set(family, `"${family}", sans-serif`);
+          }
+        });
+
+        fontSelect.empty();
+        for (const [name, val] of fontOptionsMap.entries()) {
+          fontSelect.append($('<option>', {
+            value: val,
+            text: name
+          }));
+        }
+        fontSelect.val(currentVal);
+      }
+    } catch (e) {
+      console.warn('Could not load local fonts on demand:', e);
+    }
+  }
+}
+
+function getTextSettings() {
+  const fontFamily = $('#font-family-select').val() || "'Noto Sans JP', sans-serif";
+  const fontWeight = $('#font-weight-select').val() || '700';
+  const strokeWidth = parseInt($('#stroke-width-select').val(), 10) ?? 4;
+  return { fontFamily, fontWeight, strokeWidth };
+}
+
+function updateActiveTextObject(props) {
+  const activeObj = canvas.getActiveObject();
+  if (!activeObj) return;
+
+  const targets = (activeObj.type === 'activeSelection') ? activeObj.getObjects() : [activeObj];
+  let modified = false;
+
+  targets.forEach(obj => {
+    if (obj instanceof fabric.Textbox || obj instanceof fabric.IText || obj.type === 'textbox' || obj.type === 'i-text') {
+      if (props.fontFamily !== undefined) {
+        obj.set('fontFamily', props.fontFamily);
+      }
+      if (props.fontWeight !== undefined) {
+        obj.set('fontWeight', props.fontWeight);
+      }
+      if (props.strokeWidth !== undefined) {
+        obj.set('strokeWidth', props.strokeWidth);
+      }
+      modified = true;
+    }
+  });
+
+  if (modified) {
+    canvas.requestRenderAll();
+    if (canvas.fire) {
+      canvas.fire('object:modified', { target: activeObj });
+    }
+  }
+}
+
+function syncTextControlsFromSelection() {
+  const activeObj = canvas.getActiveObject();
+  if (!activeObj) return;
+
+  const target = (activeObj.type === 'activeSelection') ? activeObj.getObjects()[0] : activeObj;
+  if (target && (target instanceof fabric.Textbox || target instanceof fabric.IText || target.type === 'textbox' || target.type === 'i-text')) {
+    if (target.fontFamily) {
+      $('#font-family-select').val(target.fontFamily);
+    }
+    if (target.fontWeight) {
+      $('#font-weight-select').val(String(target.fontWeight));
+    }
+    if (target.strokeWidth !== undefined) {
+      $('#stroke-width-select').val(String(target.strokeWidth));
+    }
+  }
+}
+
 $(document).ready(function () {
   $('#emoji-button').click(() => {
     openEmojiPicker()
@@ -80,10 +245,19 @@ $(document).ready(function () {
     copyImageToClipboard()
   })
 
-  // Add this to handle the button click
-  $('#file-upload-button').click(() => {
-    console.log('clicked button')
+  // Handle file-upload-button click
+  $('#file-upload-button').on('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('clicked file upload button');
     document.getElementById('fileInput').click();
+  });
+
+  // Also allow clicking anywhere on the image-placeholder
+  $('#image-placeholder').on('click', function (e) {
+    if (e.target.id !== 'file-upload-button') {
+      document.getElementById('fileInput').click();
+    }
   });
 
   // Add this to handle the file input change
@@ -105,15 +279,50 @@ $(document).ready(function () {
 
   watermarkToggle.prop('checked', watermarkState === 'true');
 
-
-
   // Handle watermark toggle change
   watermarkToggle.change(function () {
     const isChecked = $(this).is(':checked');
     localStorage.setItem('watermark', isChecked);
   });
 
+  // Initialize and bind Text styling controls
+  const storedWeight = localStorage.getItem('pinkarrows_font_weight');
+  if (storedWeight) {
+    $('#font-weight-select').val(storedWeight);
+  }
+  const storedStroke = localStorage.getItem('pinkarrows_stroke_width');
+  if (storedStroke !== null) {
+    $('#stroke-width-select').val(storedStroke);
+  } else {
+    $('#stroke-width-select').val('4');
+  }
 
+  initFontList();
+
+  $('#font-family-select').on('focus', function () {
+    loadSystemFontsIfNeeded();
+  });
+
+  $('#font-family-select').change(async function () {
+    const val = $(this).val();
+    localStorage.setItem('pinkarrows_font_family', val);
+    try {
+      await document.fonts.load(`16px ${val}`);
+    } catch (e) {}
+    updateActiveTextObject({ fontFamily: val });
+  });
+
+  $('#font-weight-select').change(function () {
+    const val = $(this).val();
+    localStorage.setItem('pinkarrows_font_weight', val);
+    updateActiveTextObject({ fontWeight: val });
+  });
+
+  $('#stroke-width-select').change(function () {
+    const val = parseInt($(this).val(), 10);
+    localStorage.setItem('pinkarrows_stroke_width', val);
+    updateActiveTextObject({ strokeWidth: val });
+  });
 
   function refreshUI() {
     if (loggedInUser) {
@@ -134,17 +343,16 @@ $(document).ready(function () {
 
   }
 
-  $(".tool-btn").click(function () {
+  $("#toolbar .tool-btn[data-mode]").click(function () {
     let modeText = $(this).attr("data-mode");
-    setMode(Mode[modeText]); // set global mode
-
-    // Remove 'selected' class from all buttons
-    $(".tool-btn").removeClass("selected");
-
-    // Add 'selected' class to clicked button
-    $(this).addClass("selected");
-
+    if (Mode[modeText] !== undefined) {
+      setMode(Mode[modeText]); // set global mode
+      $("#toolbar .tool-btn").removeClass("selected");
+      $(this).addClass("selected");
+    }
   });
+
+  setTimeout(resizeCanvas, 50);
 });
 
 function getModeNameForMode(modeValue) {
@@ -195,8 +403,11 @@ canvas.on('history:append', function (event) {
 window.addEventListener('resize', resizeCanvas, false);
 
 function resizeCanvas() {
-  canvas.setWidth(window.innerWidth);
-  canvas.setHeight(window.innerHeight);
+  const dropArea = $('#drop_area');
+  const w = dropArea.width() || window.innerWidth;
+  const h = dropArea.height() || (window.innerHeight - ($('#toolbar').outerHeight(true) || 40) - ($('header').outerHeight(true) || 60));
+  canvas.setWidth(w);
+  canvas.setHeight(h);
   redrawCanvas();
 }
 
@@ -251,23 +462,37 @@ let isDown = false;
 let origX = 0;
 let origY = 0;
 
-// Prevent default actions
-['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-  dropArea.addEventListener(eventName, preventDefaults, false);
+// Prevent default drag behaviors so drop is allowed
+['dragenter', 'dragover', 'dragleave'].forEach(eventName => {
+  window.addEventListener(eventName, preventDefaults, false);
+  document.addEventListener(eventName, preventDefaults, false);
+  if (dropArea) {
+    dropArea.addEventListener(eventName, preventDefaults, false);
+  }
 });
 
 function preventDefaults(e) {
   e.preventDefault();
-  e.stopPropagation();
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'copy';
+  }
 }
 
-// Handle drop
-dropArea.addEventListener('drop', handleDrop, false);
-
+// Handle drop globally on window, document, and dropArea
 function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
   let dt = e.dataTransfer;
-  let files = dt.files;
-  handleFiles(files);
+  if (dt && dt.files && dt.files.length > 0) {
+    let files = dt.files;
+    handleFiles(files);
+  }
+}
+
+window.addEventListener('drop', handleDrop, false);
+document.addEventListener('drop', handleDrop, false);
+if (dropArea) {
+  dropArea.addEventListener('drop', handleDrop, false);
 }
 
 var currentFileName = 'canvas_image.png';
@@ -599,17 +824,18 @@ canvas.on('mouse:down', function (options) {
       return;
     }
     let pointer = canvas.getPointer(options.e);
+    let { fontFamily, fontWeight, strokeWidth } = getTextSettings();
     let text = new CustomTextbox('text', {
       left: pointer.x,
       top: pointer.y,
-      fontFamily: 'sans-serif',
+      fontFamily: fontFamily,
       fill: '#FF007F',  // Pink color
       stroke: '#ffffff', // White border
-      strokeWidth: 2,
+      strokeWidth: strokeWidth,
       strokeLineJoin: 'round',
       paintFirst: 'stroke',
       shadow: 'rgba(0,0,0,0.3) 2px 2px 2px',  // Black shadow
-      fontWeight: '900',
+      fontWeight: fontWeight,
       fixedWidth: 250,
       width: 250
     });
@@ -740,3 +966,6 @@ document.addEventListener('keydown', function (event) {
     redrawCanvas();
   }
 });
+
+canvas.on('selection:created', syncTextControlsFromSelection);
+canvas.on('selection:updated', syncTextControlsFromSelection);

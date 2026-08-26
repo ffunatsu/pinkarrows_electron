@@ -22,6 +22,8 @@
             display: flex;
             flex-grow: 1;
             border: 1px solid black;
+            position: relative;
+            overflow: hidden;
         }
 
         .tool-btn.selected {
@@ -30,14 +32,36 @@
         }
 
         svg {
-            margin: 2px;
+            margin: 1px;
         }
 
         .toolbar {
             display: flex;
-            align-items: start;
-            gap: 1px;
-            /* Adjust the gap as needed */
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 2px;
+            padding: 2px 8px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            height: 38px;
+            min-height: 38px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .tool-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #ced4da;
+            background-color: #ffffff;
+            border-radius: 4px;
+            padding: 1px 6px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .watermark-toggle-container {
@@ -45,12 +69,19 @@
             align-items: center;
             height: 100%;
             gap: 3px;
+            margin-left: 2px;
+            font-size: 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         h1 {
             font-size: 1.0em !important
         }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap" rel="stylesheet">
     <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" as="style"
         onload="this.onload=null;this.rel='stylesheet'">
     <noscript>
@@ -60,19 +91,19 @@
 </head>
 
 <body>
-    <header class="d-flex flex-wrap justify-content-between py-3 mb-3 border-bottom">
+    <header class="d-flex flex-wrap justify-content-between py-2 mb-2 border-bottom">
         <div class="d-flex align-items-center link-body-emphasis text-decoration-none ms-4">
             <div class="d-flex flex-row">
-                <img class="d-flex me-1" src="assets/logo.png" alt="PinkArrows" width="32" height="32">
+                <img class="d-flex me-1" src="assets/logo.png" alt="PinkArrows" width="28" height="28">
                 <div class="d-flex flex-column">
-                    <span class="fs-4 m-0 p-0">Pink Arrows</span>
-                    <h1 class="fs-16 m-0 p-0">Add text and draw on images or screen captures</h1>
+                    <span class="fs-5 m-0 p-0 lh-1">Pink Arrows</span>
+                    <h1 class="fs-16 m-0 p-0 text-secondary" style="font-size: 12px !important;">Add text and draw on images or screen captures</h1>
                 </div>
             </div>
         </div>
 
         <ul class="nav nav-pills me-4">
-            <li class="nav-item"><a href="#" class="nav-link" data-bs-toggle="modal"
+            <li class="nav-item"><a href="#" class="nav-link py-1" data-bs-toggle="modal"
                     data-bs-target="#aboutModal">About</a></li>
         </ul>
     </header>
@@ -146,6 +177,42 @@
                 <path d="M6 11H9.75M6 14H9.75M6 17H9.75M12.75 17.75H15C16.2426 17.75 17.25 16.7426 17.25 15.5V5.10822C17.25 3.97324 16.405 3.01015 15.2739 2.91627C14.9006 2.88529 14.5261 2.85858 14.1505 2.83619M8.34952 2.83619C8.28483 3.04602 8.25 3.26894 8.25 3.5C8.25 3.91421 8.58579 4.25 9 4.25H13.5C13.9142 4.25 14.25 3.91421 14.25 3.5C14.25 3.26894 14.2152 3.04602 14.1505 2.83619M8.34952 2.83619C8.63276 1.91757 9.48842 1.25 10.5 1.25H12C13.0116 1.25 13.8672 1.91757 14.1505 2.83619M8.34952 2.83619C7.97386 2.85858 7.59937 2.88529 7.22608 2.91627C6.09499 3.01015 5.25 3.97324 5.25 5.10822V7.25M5.25 7.25H1.875C1.25368 7.25 0.75 7.75368 0.75 8.375V19.625C0.75 20.2463 1.25368 20.75 1.875 20.75H11.625C12.2463 20.75 12.75 20.2463 12.75 19.625V8.375C12.75 7.75368 12.2463 7.25 11.625 7.25H5.25ZM3.75 11H3.7575V11.0075H3.75V11ZM3.75 14H3.7575V14.0075H3.75V14ZM3.75 17H3.7575V17.0075H3.75V17Z" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
         </button>
+
+        <div class="vr mx-1 align-self-stretch my-1 text-secondary opacity-25"></div>
+
+        <div id="text-controls" class="d-inline-flex align-items-center gap-1">
+            <select id="font-family-select" class="form-select form-select-sm" style="width: 120px; font-size: 11px; height: 30px; padding: 1px 18px 1px 6px;" title="Font Family">
+                <option value="'Noto Sans JP', sans-serif">Noto Sans JP</option>
+                <option value="sans-serif">Default Sans</option>
+                <option value="'Segoe UI', sans-serif">Segoe UI</option>
+                <option value="'Meiryo', sans-serif">Meiryo</option>
+                <option value="'Yu Gothic', sans-serif">Yu Gothic</option>
+                <option value="'Arial', sans-serif">Arial</option>
+                <option value="'Impact', sans-serif">Impact</option>
+            </select>
+
+            <select id="font-weight-select" class="form-select form-select-sm" style="width: 80px; font-size: 11px; height: 30px; padding: 1px 16px 1px 6px;" title="Font Weight">
+                <option value="400">Regular</option>
+                <option value="500">Medium</option>
+                <option value="700" selected>Bold</option>
+                <option value="900">Black</option>
+            </select>
+
+            <select id="stroke-width-select" class="form-select form-select-sm" style="width: 90px; font-size: 11px; height: 30px; padding: 1px 16px 1px 6px;" title="Outline Width">
+                <option value="0">No Border</option>
+                <option value="1">Border 1px</option>
+                <option value="2">Border 2px</option>
+                <option value="3">Border 3px</option>
+                <option value="4" selected>Border 4px</option>
+                <option value="6">Border 6px</option>
+                <option value="8">Border 8px</option>
+                <option value="10">Border 10px</option>
+                <option value="12">Border 12px</option>
+            </select>
+        </div>
+
+        <div class="vr mx-1 align-self-stretch my-1 text-secondary opacity-25"></div>
+
         <div class="watermark-toggle-container">
             <label for="watermark-toggle" class="mr-2">Watermark</label>
             <input type="checkbox" id="watermark-toggle" checked>
@@ -165,7 +232,7 @@
                     <p class="mb-1">Drag and drop an image here or paste (Ctrl+V / ⌘V)</p>
                 </div>
                 <input type="file" id="fileInput" style="display: none;" accept="image/*">
-            <button id="file-upload-button" class="tool-btn">or select an image</button>
+                <label for="fileInput" id="file-upload-button" class="tool-btn mt-2" style="cursor: pointer; position: relative; z-index: 1000;">or select an image</label>
         </div>
         <canvas id="canvas" width="800" height="600"></canvas>
     </div>
@@ -199,8 +266,6 @@
     </div>
 </body>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-<script type="module" src="src/script.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"
     integrity="sha384-HwwvtgBNo3bZJJLYd8oVXjrBZt8cqVSpeBNS5n7C8IVInixGAoxmnlMuBnhbgrkm"
     crossorigin="anonymous"></script>
@@ -208,6 +273,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 <script src="src/plugins/fabric-history.js"></script>
 <script src="src/plugins/jquery.toast.min.js"></script>
+<script type="module" src="src/script.js"></script>
 <script>
     !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]), t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId setPersonProperties".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
     posthog.init('phc_AgTA0UUBxAb1j7ScfjH8NoNcwzA9vnlvYVAumCFxyss', {
