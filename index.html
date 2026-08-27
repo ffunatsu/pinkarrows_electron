@@ -116,6 +116,37 @@
             background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
         }
 
+        .screenshot-source-card {
+            cursor: pointer;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            overflow: hidden;
+            transition: border-color 0.15s, transform 0.15s;
+            background: #fff;
+        }
+
+        .screenshot-source-card:hover {
+            border-color: #FF007F;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(255, 0, 127, 0.15);
+        }
+
+        .screenshot-source-thumb {
+            width: 100%;
+            height: 120px;
+            object-fit: contain;
+            background-color: #212529;
+        }
+
+        .screenshot-source-title {
+            font-size: 11px;
+            padding: 4px 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: #f8f9fa;
+        }
+
         h1 {
             font-size: 1.0em !important
         }
@@ -333,7 +364,16 @@
                     <p class="mb-1">Drag and drop an image here or paste (Ctrl+V / ⌘V)</p>
                 </div>
                 <input type="file" id="fileInput" style="display: none;" accept="image/*">
-                <label for="fileInput" id="file-upload-button" class="tool-btn mt-2" style="cursor: pointer; position: relative; z-index: 1000;">or select an image</label>
+                <div class="d-flex align-items-center gap-2 mt-2">
+                    <label for="fileInput" id="file-upload-button" class="tool-btn" style="cursor: pointer; position: relative; z-index: 1000;">or select an image</label>
+                    <button type="button" id="capture-screen-btn" class="tool-btn" style="cursor: pointer; position: relative; z-index: 1000;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#FF007F" class="bi bi-camera me-1" viewBox="0 0 16 16">
+                            <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 7.827 3h2.344a1 1 0 0 1 .707.293l.83.828A3 3 0 0 0 13.828 5H15a1 1 0 0 1 1 1v6zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4H2z"/>
+                            <path d="M8 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm0 1a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zM3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0z"/>
+                        </svg>
+                        Take Screenshot
+                    </button>
+                </div>
         </div>
         <canvas id="canvas" width="800" height="600"></canvas>
     </div>
@@ -370,6 +410,21 @@
             </div>
         </div>
     </div>
+    <!-- Screenshot Source Picker Modal -->
+    <div class="modal fade" id="screenshotModal" tabindex="-1" aria-labelledby="screenshotModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6" id="screenshotModalLabel">Select Screen or Window to Capture</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div id="screenshot-sources-grid" class="d-grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
+                        <!-- Populated by script.js -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </body>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>

@@ -347,6 +347,13 @@ $(document).ready(function () {
     copyImageToClipboard()
   })
 
+  // Screenshot capture button
+  $('#capture-screen-btn').click(function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    captureScreenshot();
+  });
+
   // Prevent browser autoscroll on middle click over drop_area / canvas
   $('#drop_area').on('mousedown auxclick', function (e) {
     if (e.button === 1 || e.which === 2) {
@@ -358,15 +365,15 @@ $(document).ready(function () {
   $('#file-upload-button').on('click', function (e) {
     e.preventDefault();
     e.stopPropagation();
-    console.log('clicked file upload button');
     document.getElementById('fileInput').click();
   });
 
-  // Also allow clicking anywhere on the image-placeholder
+  // Also allow clicking anywhere on the image-placeholder (excluding buttons)
   $('#image-placeholder').on('click', function (e) {
-    if (e.target.id !== 'file-upload-button') {
-      document.getElementById('fileInput').click();
+    if ($(e.target).closest('#file-upload-button, #capture-screen-btn').length > 0) {
+      return;
     }
+    document.getElementById('fileInput').click();
   });
 
   // Add this to handle the file input change
@@ -660,37 +667,29 @@ let origX = 0;
 let origY = 0;
 
 // Prevent default drag behaviors so drop is allowed
-['dragenter', 'dragover', 'dragleave'].forEach(eventName => {
-  window.addEventListener(eventName, preventDefaults, false);
-  document.addEventListener(eventName, preventDefaults, false);
-  if (dropArea) {
-    dropArea.addEventListener(eventName, preventDefaults, false);
-  }
+['dragenter', 'dragover'].forEach(eventName => {
+  window.addEventListener(eventName, function (e) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }, false);
 });
 
-function preventDefaults(e) {
-  e.preventDefault();
-  if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = 'copy';
-  }
-}
+['dragleave', 'dragend'].forEach(eventName => {
+  window.addEventListener(eventName, function (e) {
+    e.preventDefault();
+  }, false);
+});
 
-// Handle drop globally on window, document, and dropArea
-function handleDrop(e) {
+// Handle drop globally on window
+window.addEventListener('drop', function (e) {
   e.preventDefault();
-  e.stopPropagation();
   let dt = e.dataTransfer;
   if (dt && dt.files && dt.files.length > 0) {
-    let files = dt.files;
-    handleFiles(files);
+    handleFiles(dt.files);
   }
-}
-
-window.addEventListener('drop', handleDrop, false);
-document.addEventListener('drop', handleDrop, false);
-if (dropArea) {
-  dropArea.addEventListener('drop', handleDrop, false);
-}
+}, false);
 
 var currentFileName = 'canvas_image.png';
 
@@ -859,6 +858,129 @@ async function copyImageToClipboard() {
         $.toast("Failed to copy image")
       });
     });
+}
+
+function getScreenshotFileName() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const mm = pad(now.getMonth() + 1);
+  const dd = pad(now.getDate());
+  const hh = pad(now.getHours());
+  const min = pad(now.getMinutes());
+  const ss = pad(now.getSeconds());
+  return `Screenshot_${yyyy}-${mm}-${dd}_${hh}-${min}-${ss}.png`;
+}
+
+function loadScreenshotImageFromDataURL(dataURL) {
+  currentFileName = getScreenshotFileName();
+  fabric.Image.fromURL(dataURL, function (oImg) {
+    scaleImageToFit(oImg);
+    oImg.set({
+      left: (canvas.width - oImg.getScaledWidth()) / 2,
+      top: (canvas.height - oImg.getScaledHeight()) / 2,
+      angle: 0
+    }).setCoords();
+
+    let insertIndex = canvas.getObjects().findIndex(obj =>
+      obj.type !== 'image' && obj.type !== 'backgroundImage'
+    );
+    if (insertIndex === -1) {
+      insertIndex = canvas.getObjects().length;
+    }
+    canvas.insertAt(oImg, insertIndex);
+    redrawCanvas();
+    $.toast('Screenshot captured!');
+  });
+}
+
+async function captureScreenshot() {
+  // Check if running in Electron environment with electronAPI bridge
+  if (window.electronAPI && typeof window.electronAPI.getDesktopSources === 'function') {
+    try {
+      const sources = await window.electronAPI.getDesktopSources();
+      if (!sources || sources.length === 0) {
+        $.toast('No screens or windows found to capture');
+        return;
+      }
+
+      // Populate screenshotModal with sources
+      const grid = $('#screenshot-sources-grid');
+      grid.empty();
+
+      sources.forEach(source => {
+        const card = $(`
+          <div class="screenshot-source-card" title="${source.name}">
+            <img class="screenshot-source-thumb" src="${source.thumbnail}" alt="${source.name}">
+            <div class="screenshot-source-title">${source.name}</div>
+          </div>
+        `);
+        card.click(function () {
+          const modalEl = document.getElementById('screenshotModal');
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+
+          loadScreenshotImageFromDataURL(source.thumbnail);
+        });
+        grid.append(card);
+      });
+
+      const screenshotModal = new bootstrap.Modal(document.getElementById('screenshotModal'));
+      screenshotModal.show();
+      return;
+    } catch (e) {
+      console.error('Electron desktopCapturer failed:', e);
+      $.toast('Failed to capture screenshot in Electron');
+      return;
+    }
+  }
+
+  // Web Browser fallback (Screen Capture API as in onlineminitools.com)
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      $.toast('Screen capture is not supported in this environment');
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        mediaSource: 'screen',
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    });
+
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.play();
+
+    await new Promise(resolve => {
+      video.onloadedmetadata = () => {
+        video.currentTime = 0;
+        resolve();
+      };
+    });
+
+    // Brief delay to ensure frame is painted
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = video.videoWidth;
+    offscreenCanvas.height = video.videoHeight;
+    const ctx = offscreenCanvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+
+    stream.getTracks().forEach(track => track.stop());
+
+    const dataURL = offscreenCanvas.toDataURL('image/png');
+    loadScreenshotImageFromDataURL(dataURL);
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') {
+      console.error('Screenshot capture failed:', err);
+      $.toast('Failed to capture screenshot');
+    }
+  }
 }
 
 let isPanning = false;

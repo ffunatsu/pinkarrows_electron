@@ -1,6 +1,6 @@
 {
   "name": "pinkarrows_electron",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "description": "Pink Arrows is a lightweight, web-based annotation tool. Hosted version at [pinkarrows.app](https://pinkarrows.app) with no installation required.",
   "homepage": "https://github.com/funatsufumiya/pinkarrows_electron#readme",
   "bugs": {
