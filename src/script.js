@@ -1,4 +1,5 @@
 import { createArrow, setArrowHeadPoint } from './arrow.js'
+import { hasDistinctEndpoints } from './line-utils.mjs'
 // Import the functions you need from the SDKs you need
 
 var emojiPicker = null;
@@ -46,7 +47,7 @@ async function loadEmojiPopup() {
       top: 100,
       fontFamily: 'sans-serif',
       fontSize: 100,
-      fill: '#FF007F',  // Pink color
+      fill: annotationColor,
       stroke: '#ffffff', // White border
       strokeWidth: 2,
       strokeLineJoin: 'round',
@@ -341,6 +342,7 @@ $(document).ready(function () {
     downloadCroppedWithWatermark()
   })
 
+
   $('#copy-image-to-clipboard-button').click(() => {
     copyImageToClipboard()
   })
@@ -450,6 +452,47 @@ $(document).ready(function () {
 
   }
 
+  // Build the color palette
+  const colorPalette = $('#color-palette');
+  const customColorInput = $('#custom-color-input');
+  ANNOTATION_COLORS.forEach(color => {
+    const swatch = $('<button type="button" class="color-swatch"></button>')
+      .attr('data-color', color)
+      .attr('title', color)
+      .css('background-color', color);
+    swatch.click(() => {
+      setAnnotationColor(color);
+      colorPalette.addClass('d-none');
+    });
+    customColorInput.before(swatch);
+  });
+
+  const customSwatch = $('<button type="button" id="custom-color-swatch" class="color-swatch" title="Custom color"></button>');
+  customSwatch.click(() => {
+    customColorInput.val(annotationColor);
+    customColorInput[0].click();
+  });
+  customColorInput.before(customSwatch);
+
+  customColorInput.on('input', function () {
+    setAnnotationColor(this.value);
+  });
+
+  $('#color-button').click(function (e) {
+    e.stopPropagation();
+    colorPalette.toggleClass('d-none');
+  });
+
+  // Close the palette when clicking anywhere else
+  $(document).click(function (e) {
+    if (!$(e.target).closest('.color-picker-container').length) {
+      colorPalette.addClass('d-none');
+    }
+  });
+
+  // Reflect the persisted color in the toolbar
+  setAnnotationColor(annotationColor);
+
   $("#toolbar .tool-btn[data-mode]").click(function () {
     let modeText = $(this).attr("data-mode");
     if (Mode[modeText] !== undefined) {
@@ -528,10 +571,13 @@ let Mode = Object.freeze({
   "NONE": 0,
   "TEXT": 1,
   "RECT": 2,
-  "EDIT_TEXT": 3,
-  "EDIT_RECT": 4,
-  "ARROW": 5,
-  "EMOJI": 6
+  "OVAL": 3,
+  "EDIT_TEXT": 4,
+  "EDIT_RECT": 5,
+  "EDIT_OVAL": 6,
+  "ARROW": 7,
+  "LINE": 8,
+  "EMOJI": 9
 });
 let mode = Mode.NONE
 setMode(Mode.NONE);
@@ -562,6 +608,47 @@ function setMode(newMode) {
     }
   }
 
+}
+
+
+// Annotation color, shared by all tools and persisted like the watermark toggle
+const DEFAULT_ANNOTATION_COLOR = '#FF007F';
+const ANNOTATION_COLORS = [
+  '#FF007F', '#FF3B30', '#FF9500', '#FFCC00', '#34C759', '#00C7BE',
+  '#32ADE6', '#007AFF', '#5856D6', '#AF52DE', '#FF2DCF', '#FFFFFF',
+  '#C7C7CC', '#8E8E93', '#3A3A3C', '#000000'
+];
+let annotationColor = localStorage.getItem('annotationColor') || DEFAULT_ANNOTATION_COLOR;
+
+function applyColorToObject(obj, color) {
+  if (obj.type === 'activeSelection' || obj.type === 'group') {
+    obj.forEachObject(o => applyColorToObject(o, color));
+    return;
+  }
+  if (obj.type === 'image') {
+    return;
+  }
+  // Filled shapes recolor their fill; outlined shapes recolor their stroke
+  if (obj.type === 'polygon' || obj.type === 'textbox' || obj.type === 'i-text') {
+    obj.set('fill', color);
+  } else {
+    obj.set('stroke', color);
+  }
+  obj.dirty = true;
+}
+
+function setAnnotationColor(color) {
+  annotationColor = color;
+  localStorage.setItem('annotationColor', color);
+  $('#color-swatch-current').css('background-color', color);
+  $('.color-swatch').removeClass('selected');
+  $(`.color-swatch[data-color='${color.toUpperCase()}']`).addClass('selected');
+
+  const activeObject = canvas.getActiveObject();
+  if (activeObject) {
+    applyColorToObject(activeObject, color);
+    redrawCanvas();
+  }
 }
 
 let currentlyCreatingObject = null;
@@ -611,6 +698,17 @@ function handleFiles(files) {
   ([...files]).forEach(previewFile);
 }
 
+// Scale an image down so it fits within the visible canvas, preserving
+// aspect ratio; small images are left at their natural size
+function scaleImageToFit(oImg) {
+  const maxWidth = canvas.width * 0.9;
+  const maxHeight = canvas.height * 0.8;
+  const scaleFactor = Math.min(1, maxWidth / oImg.width, maxHeight / oImg.height);
+  if (scaleFactor < 1) {
+    oImg.scale(scaleFactor);
+  }
+}
+
 function previewFile(file) {
   if (file && file.name) {
     const baseName = file.name.replace(/\.[^/.]+$/, '');
@@ -620,14 +718,7 @@ function previewFile(file) {
   reader.readAsDataURL(file);
   reader.onloadend = function () {
     fabric.Image.fromURL(reader.result, function (oImg) {
-      // Calculate the maximum width (90% of canvas width)
-      const maxWidth = canvas.width * 0.9;
-
-      // Scale the image if it's wider than maxWidth
-      if (oImg.width > maxWidth) {
-        const scaleFactor = maxWidth / oImg.width;
-        oImg.scale(scaleFactor);
-      }
+      scaleImageToFit(oImg);
 
       oImg.set({
         left: (canvas.width - oImg.getScaledWidth()) / 2,  // Center horizontally
@@ -798,7 +889,7 @@ document.addEventListener('keydown', function (e) {
   }
 
   // cmd + enter should exit edit mode
-  if ((e.ctrlKey || e.metaKey) && e.which === 13) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     if (mode == Mode.EDIT_TEXT) {
       let textbox = canvas.getActiveObject()
 
@@ -835,103 +926,100 @@ document.addEventListener('keydown', function (e) {
   if (mode == Mode.EDIT_TEXT) {
     return;
   }
-  switch (e.key) {
-    case 't':
-      setMode(Mode.TEXT);
-      break;
-    case 'r':
-      setMode(Mode.RECT);
-      break;
-    case 'a':
-      setMode(Mode.ARROW);
-      break;
-    case 'e':
-      openEmojiPicker()
-      setMode(Mode.EMOJI)
-      break
-    case 'd':
-      downloadCroppedWithWatermark();
-      break;
-    case 'c':
-      copyImageToClipboard()
-    // additional cases can be added as you add more features
-    default:
-      setMode(Mode.NONE);
+  // Bare-key hotkeys only; Ctrl/Cmd combos are handled below (otherwise
+  // Ctrl+C would also trigger the full-image copy, Ctrl+A the arrow tool, etc.)
+  if (!e.ctrlKey && !e.metaKey) {
+    switch (e.key) {
+      case '6':
+      case 't':
+        setMode(Mode.TEXT);
+        break;
+      case '4':
+      case 'r':
+        setMode(Mode.RECT);
+        break;
+      case '2':
+      case 'a':
+        setMode(Mode.ARROW);
+        break;
+      case '3':
+      case 'l':
+        setMode(Mode.LINE);
+        break;
+      case '5':
+      case 'o':
+        setMode(Mode.OVAL);
+        break;
+      case '7':
+      case 'e':
+        openEmojiPicker()
+        setMode(Mode.EMOJI)
+        break
+      case 'd':
+        downloadCroppedWithWatermark();
+        break;
+      case 'c':
+        copyImageToClipboard()
+      // additional cases can be added as you add more features
+      case '1':
+      default:
+        setMode(Mode.NONE);
+    }
   }
-  if ((e.ctrlKey || e.metaKey) && e.which === 67) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
     copy();
   }
 
   // Ctrl+V or Cmd+V for MacOS
-  if ((e.ctrlKey || e.metaKey) && e.which === 86) {
-    // Check for object in clipboard
-    if (copiedObject) {
-      paste();
-      return;
-    }
-
-    // Try to get clipboard image data
-    navigator.clipboard.read().then(items => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+    // Decide what to paste from the OS clipboard contents, so an old internal
+    // copy can't permanently block image pasting (#48)
+    navigator.clipboard.read().then(async items => {
       for (const item of items) {
-        if (item.types.includes('image/png' || 'image/jpeg')) {
-          item.getType('image/png').then(blob => {
-            const reader = new FileReader();
-            reader.onload = function (event) {
-              fabric.Image.fromURL(event.target.result, function (oImg) {
-                // Calculate the max width (90% of canvas width)
-                const maxWidth = canvas.width * 0.9;
-
-                // Scale image if wider than maxWidth
-                if (oImg.width > maxWidth) {
-                  const scaleFactor = maxWidth / oImg.width;
-                  oImg.scale(scaleFactor);
-                }
-
-                oImg.set({
-                  left: (canvas.width - oImg.getScaledWidth()) / 2,  // Center horizontally
-                  top: canvas.height * .1,
-                  angle: 0
-                }).setCoords();
-
-                // Find insertion index
-                let insertIndex = canvas.getObjects().findIndex(obj =>
-                  obj.type !== 'image' && obj.type !== 'backgroundImage'
-                );
-
-                // if no non-image objects found, insert at the top
-                if (insertIndex === -1) {
-                  insertIndex = canvas.getObjects().length;
-                }
-
-                // Insert the image at the found index
-                canvas.insertAt(oImg, insertIndex);
-                redrawCanvas();
-                $.toast('Image pasted from clipboard');
-              });
-            };
-            reader.readAsDataURL(blob);
-          });
+        const imageType = item.types.find(t => t === 'image/png' || t === 'image/jpeg');
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          pasteImageBlob(blob);
+          return;
+        }
+        if (copiedObject && item.types.includes('text/plain')) {
+          const text = await (await item.getType('text/plain')).text();
+          if (text === CLIPBOARD_OBJECT_MARKER) {
+            paste();
+            return;
+          }
         }
       }
+      // Nothing usable in the OS clipboard; fall back to the internal copy
+      if (copiedObject) {
+        paste();
+      }
     }).catch(err => {
+      // Clipboard read can be blocked by permissions; the internal copy still works
+      if (copiedObject) {
+        paste();
+        return;
+      }
       $.toast('Failed to paste image from clipboard');
       console.error('Failed to paste image from clipboard', err);
     })
   }
 
-  if ((e.ctrlKey || e.metaKey) && e.which === 90 && !e.shiftKey) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
     canvas.undo();
     redrawCanvas()
   }
 
   // Ctrl+Shift+Z or Cmd+Shift+Z for MacOS
-  if ((e.ctrlKey || e.metaKey) && e.which === 90 && e.shiftKey) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && e.shiftKey) {
     canvas.redo();
     redrawCanvas()
   }
 
   // Ctrl+A or Cmd-A selects all objects
-  if ((e.ctrlKey || e.metaKey) && e.which === 65) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    // Keep the browser from also selecting the page's text and buttons
+    e.preventDefault();
     var allObjects = canvas.getObjects();
 
     if (allObjects.length) {
@@ -988,12 +1076,48 @@ canvas.on('mouse:wheel', function (opt) {
   opt.e.stopPropagation();
 });
 
+// Written to the OS clipboard on copy so paste can tell whether the internal
+// copy or an image copied in another app is the most recent thing copied
+const CLIPBOARD_OBJECT_MARKER = 'pinkarrows:copied-object';
+
 function copy() {
   var activeObject = canvas.getActiveObject();
 
   if (activeObject) {
     copiedObject = activeObject;
+    navigator.clipboard.writeText(CLIPBOARD_OBJECT_MARKER).catch(() => {});
   }
+}
+
+function pasteImageBlob(blob) {
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    fabric.Image.fromURL(event.target.result, function(oImg) {
+      scaleImageToFit(oImg);
+
+      oImg.set({
+        left: (canvas.width - oImg.getScaledWidth()) / 2,
+        top: canvas.height * .1,
+        angle: 0
+      }).setCoords();
+
+      // Find insertion index
+      let insertIndex = canvas.getObjects().findIndex(obj =>
+        obj.type !== 'image' && obj.type !== 'backgroundImage'
+      );
+
+      // if no non-image objects found, insert at the top
+      if (insertIndex === -1) {
+        insertIndex = canvas.getObjects().length;
+      }
+
+      // Insert the image at the found index
+      canvas.insertAt(oImg, insertIndex);
+      redrawCanvas();
+      $.toast('Image pasted from clipboard');
+    });
+  };
+  reader.readAsDataURL(blob);
 }
 
 function paste() {
@@ -1051,7 +1175,7 @@ canvas.on('mouse:down', function (options) {
       left: pointer.x,
       top: pointer.y,
       fontFamily: fontFamily,
-      fill: '#FF007F',  // Pink color
+      fill: annotationColor,
       stroke: '#ffffff', // White border
       strokeWidth: strokeWidth,
       strokeLineJoin: 'round',
@@ -1090,7 +1214,7 @@ canvas.on('mouse:down', function (options) {
       height: 50,
       angle: 0,
       fill: 'rgba(255,255,255,0)',
-      stroke: '#FF007F',  // Pink color
+      stroke: annotationColor,
       strokeWidth: 4,
       selectable: true,
       hasBorders: false,
@@ -1108,12 +1232,58 @@ canvas.on('mouse:down', function (options) {
 
     canvas.add(rect);
     redrawCanvas();
+  } else if (mode == Mode.OVAL) {
+    console.log('attempting to draw oval')
+    let pointer = canvas.getPointer(options.e);
+    origX = pointer.x;
+    origY = pointer.y;
+    let oval = new fabric.Ellipse({
+      left: origX,
+      top: origY,
+      originX: 'left',
+      originY: 'top',
+      rx: 25,
+      ry: 25,
+      angle: 0,
+      fill: 'rgba(255,255,255,0)',
+      stroke: annotationColor,
+      strokeWidth: 4,
+      selectable: true,
+      hasBorders: false,
+      hasControls: true,
+      strokeUniform: true,
+    })
+    currentlyCreatingObject = oval;
+    console.log(oval)
+
+    // detect oval edit
+    oval.on('selected', function () {
+      //mode = Mode.EDIT_OVAL;
+      console.log("mode is EDIT_OVAL")
+    });
+
+    canvas.add(oval);
+    redrawCanvas();
   } else if (mode == Mode.ARROW) {
 
-    let arrow = createArrow(origX, origY);
+    let arrow = createArrow(origX, origY, annotationColor);
     canvas.add(arrow);
     currentlyCreatingObject = arrow;
 
+    redrawCanvas();
+  } else if (mode == Mode.LINE) {
+    let line = new fabric.Line([origX, origY, origX, origY], {
+      stroke: annotationColor,
+      strokeWidth: 4,
+      selectable: true,
+      hasBorders: false,
+      hasControls: true,
+      strokeLineCap: 'round',
+      strokeUniform: true,
+    });
+
+    canvas.add(line);
+    currentlyCreatingObject = line;
     redrawCanvas();
   } else if (mode == Mode.NONE) {
 
@@ -1158,10 +1328,25 @@ canvas.on('mouse:move', function (o) {
         height: bounds.height
       });
     }
+  } else if (mode == Mode.OVAL) {
+    if (currentlyCreatingObject) {
+      let bounds = getBoundsForPointer(pointer)
+      currentlyCreatingObject.set({
+        left: bounds.left,
+        top: bounds.top,
+        rx: bounds.width/2,
+        ry: bounds.height/2
+      });
+    }
   } else if (mode == Mode.ARROW) {
     if (currentlyCreatingObject) {
       let arrow = currentlyCreatingObject
       setArrowHeadPoint(arrow, pointer.x, pointer.y)
+    }
+  } else if (mode == Mode.LINE) {
+    if (currentlyCreatingObject) {
+      currentlyCreatingObject.set({ x2: pointer.x, y2: pointer.y });
+      currentlyCreatingObject.setCoords();
     }
   }
 
@@ -1184,11 +1369,23 @@ canvas.on('mouse:up', function (o) {
   }
 
   isDown = false;
-  if (mode == Mode.RECT) {
+  if (mode == Mode.RECT || mode == Mode.OVAL) {
     canvas.setActiveObject(canvas.item(canvas.getObjects().length - 1));
     currentlyCreatingObject = null;
     setMode(Mode.NONE);
   } else if (mode == Mode.ARROW) {
+    canvas.setActiveObject(canvas.item(canvas.getObjects().length - 1))
+    currentlyCreatingObject = null;
+    setMode(Mode.NONE);
+  } else if (mode == Mode.LINE) {
+    const line = currentlyCreatingObject;
+    if (line && !hasDistinctEndpoints(line.x1, line.y1, line.x2, line.y2)) {
+      canvas.remove(line);
+      $.toast("Line endpoints must be different");
+      currentlyCreatingObject = null;
+      redrawCanvas();
+      return;
+    }
     canvas.setActiveObject(canvas.item(canvas.getObjects().length - 1))
     currentlyCreatingObject = null;
     setMode(Mode.NONE);
@@ -1212,6 +1409,5 @@ document.addEventListener('keydown', function (event) {
     redrawCanvas();
   }
 });
-
 canvas.on('selection:created', syncTextControlsFromSelection);
 canvas.on('selection:updated', syncTextControlsFromSelection);

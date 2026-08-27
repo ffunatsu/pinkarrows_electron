@@ -69,6 +69,53 @@
             flex-shrink: 0;
         }
 
+        .color-picker-container {
+            position: relative;
+        }
+
+        #color-swatch-current {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 1px solid rgba(0, 0, 0, .25);
+            vertical-align: text-bottom;
+            margin: 2px;
+        }
+
+        .color-palette {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: repeat(6, 26px);
+            gap: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+        }
+
+        .color-swatch {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            border: 1px solid rgba(0, 0, 0, .25);
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .color-swatch.selected {
+            outline: 2px solid #007bff;
+            outline-offset: 1px;
+        }
+
+        #custom-color-swatch {
+            background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+        }
+
         h1 {
             font-size: 1.0em !important
         }
@@ -105,35 +152,48 @@
     <div id="toolbar" class="toolbar">
         <!-- Row 1: Primary Tools & Actions -->
         <div class="d-flex align-items-center flex-wrap gap-1 w-100">
-            <button data-mode="NONE" class="tool-btn" title="(s) Select">
+            <button data-mode="NONE" class="tool-btn" title="(s)/(1) Select">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#FF007F" class="bi bi-cursor-fill me-1"
                     viewBox="0 0 16 16">
                     <path
                         d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                 </svg>
                 Select</button>
-            <button data-mode="ARROW" class="tool-btn" title="(a) Arrow">
+            <button data-mode="ARROW" class="tool-btn" title="(a)/(2) Arrow">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
                     fill="#FF007F" class="bi bi-arrow-up-right me-1" viewBox="0 0 16 16">
                     <path fill-rule="evenodd"
                         d="M14 2.5a.5.5 0 0 0-.5-.5h-6a.5.5 0 0 0 0 1h4.793L2.146 13.146a.5.5 0 0 0 .708.708L13 3.707V8.5a.5.5 0 0 0 1 0v-6z" />
                 </svg>
                 Arrow</button>
-            <button data-mode="RECT" class="tool-btn" title="(r) Rectangle">
+            <button data-mode="LINE" class="tool-btn" title="(l)/(3) Line Segment">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                    fill="#FF007F" class="bi bi-slash-lg me-1" viewBox="0 0 16 16">
+                    <path d="M11.293 1.293a1 1 0 0 1 1.414 1.414L4.707 10.707a1 1 0 0 1-1.414-1.414z"/>
+                </svg>
+                Line</button>
+            <button data-mode="RECT" class="tool-btn" title="(r)/(4) Rectangle">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#FF007F" class="bi bi-app me-1"
                     viewBox="0 0 16 16">
                     <path
                         d="M11 2a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3h6zM5 1a4 4 0 0 0-4 4v6a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4V5a4 4 0 0 0-4-4H5z" />
                 </svg>
                 Rectangle</button>
-            <button data-mode="TEXT" class="tool-btn" title="(t) Text">
+            <button data-mode="OVAL" class="tool-btn" title="(o)/(5) Oval">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#FF007F" class="bi bi-circle me-1"
+                    viewBox="0 0 16 16">
+                    <path
+                        d="m 7.9960937,3.3105469 c -1.8813725,0 -3.5941966,0.4902358 -4.8691406,1.3203125 -1.274944,0.8300766 -2.13671872,2.0403104 -2.13671872,3.4238281 -1.1e-7,1.3835178 0.86177472,2.5957045 2.13671872,3.4257815 1.274944,0.830076 2.987768,1.320312 4.8691406,1.320312 1.8813727,0 3.5922433,-0.490236 4.8671873,-1.320312 C 14.138225,10.650392 15,9.4382053 15,8.0546875 15,6.6711697 14.138225,5.460936 12.863281,4.6308594 11.588337,3.8007827 9.8774663,3.3105469 7.9960937,3.3105469 Z m 0,1.0566406 c 1.6956448,0 3.2218323,0.4523254 4.2910153,1.1484375 1.069183,0.6961121 1.65625,1.5936947 1.65625,2.5390625 0,0.9453678 -0.587067,1.8449035 -1.65625,2.5410155 -1.069183,0.696112 -2.5953704,1.148438 -4.2910153,1.148438 -1.6956448,0 -3.2237856,-0.452326 -4.2929687,-1.148438 C 2.6339419,9.899591 2.0468749,9.0000553 2.046875,8.0546875 2.046875,7.1093197 2.6339419,6.2117371 3.703125,5.515625 4.7723081,4.8195129 6.300449,4.3671875 7.9960937,4.3671875 Z"/>
+                </svg>
+                Oval</button>
+            <button data-mode="TEXT" class="tool-btn" title="(t)/(6) Text">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#FF007F" class="bi bi-fonts me-1"
                     viewBox="0 0 16 16">
                     <path
                         d="M12.258 3h-8.51l-.083 2.46h.479c.26-1.544.758-1.783 2.693-1.845l.424-.013v7.827c0 .663-.144.82-1.3.923v.52h4.082v-.52c-1.162-.103-1.306-.26-1.306-.923V3.602l.431.013c1.934.062 2.434.301 2.693 1.846h.479L12.258 3z" />
                 </svg>
                 Text</button>
-            <button data-mode="EMOJI" class="tool-btn" id="emoji-button" title="(e) Emoji">
+            <button data-mode="EMOJI" class="tool-btn" id="emoji-button" title="(e)/(7) Emoji">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#FF007F" class="bi bi-emoji-smile me-1"
                     viewBox="0 0 16 16">
                     <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
@@ -141,6 +201,15 @@
                         d="M4.285 9.567a.5.5 0 0 1 .683.183A3.498 3.498 0 0 0 8 11.5a3.498 3.498 0 0 0 3.032-1.75.5.5 0 1 1 .866.5A4.498 4.498 0 0 1 8 12.5a4.498 4.498 0 0 1-3.898-2.25.5.5 0 0 1 .183-.683zM7 6.5C7 7.328 6.552 8 6 8s-1-.672-1-1.5S5.448 5 6 5s1 .672 1 1.5zm4 0c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5S9.448 5 10 5s1 .672 1 1.5z" />
                 </svg>
                 Emoji</button>
+
+            <div class="color-picker-container">
+                <button class="tool-btn" id="color-button" title="Annotation Color">
+                    <span id="color-swatch-current"></span>
+                    Color</button>
+                <div id="color-palette" class="color-palette d-none">
+                    <input type="color" id="custom-color-input" style="visibility: hidden; position: absolute; width: 0; height: 0;">
+                </div>
+            </div>
 
             <div class="vr mx-1 align-self-stretch my-1 text-secondary opacity-25"></div>
 
@@ -280,11 +349,13 @@
                     <div class="hotkeys-container" style="text-align: left;">
                     <h5>Hotkeys</h5>
                     <ul class="list-unstyled">
-                        <li><strong>(s)</strong> Select</li>
-                        <li><strong>(a)</strong> Arrow</li>
-                        <li><strong>(r)</strong> Rectangle</li>
-                        <li><strong>(t)</strong> Text</li>
-                        <li><strong>(e)</strong> Emoji</li>
+                        <li><strong>(s)</strong>/<strong>(1)</strong> Select</li>
+                        <li><strong>(a)</strong>/<strong>(2)</strong> Arrow</li>
+                        <li><strong>(l)</strong>/<strong>(3)</strong> Line Segment</li>
+                        <li><strong>(r)</strong>/<strong>(4)</strong> Rectangle</li>
+                        <li><strong>(o)</strong>/<strong>(5)</strong> Oval</li>
+                        <li><strong>(t)</strong>/<strong>(6)</strong> Text</li>
+                        <li><strong>(e)</strong>/<strong>(7)</strong> Emoji</li>
                         <li><strong>(Ctrl-Z)</strong> Undo</li>
                         <li><strong>(Ctrl-Shift-Z)</strong> Redo</li>
                         <li><strong>(d)</strong> Download</li>
